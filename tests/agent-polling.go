@@ -34,7 +34,7 @@ func (test *PollingTest) Test() bool {
 }
 
 func (test *PollingTest) performPollingSegment() bool {
-	test.PrintStatus(
+	test.PrintInfo(
 		fmt.Sprintf(
 			"Long polling the agent for %d seconds, with %d seconds interval...",
 			pollingDurationSeconds, pollingIntervalSeconds,
@@ -69,7 +69,7 @@ func (test *PollingTest) handlePollingIteration() bool {
 }
 
 func (test *PollingTest) assessPollingStats() bool {
-	test.PrintStatus("Finished polling segment.")
+	test.PrintInfo("Finished polling segment.")
 	if test.successfulPolls >= minimumSuccessfulPolls {
 		test.PrintStepSuccess("Long polling finished successfully")
 		test.PrintTestPassed()
@@ -87,7 +87,7 @@ func (test *PollingTest) registerAgent() bool {
 		AgentConfig: config.GetConfig().AgentConfig,
 	}
 
-	test.PrintStatus("Registering agent...")
+	test.PrintInfo("Registering agent...")
 	agentId := new(string) // Will be populated by the registration handler.
 	err := requests.RegisterAgent(regData, DefaultRegistrationHandler(agentId))
 	if err != nil {
@@ -100,7 +100,7 @@ func (test *PollingTest) registerAgent() bool {
 }
 
 func (test *PollingTest) pollServer() int {
-	test.PrintStatus("Making a long polling request...")
+	test.PrintInfo("Making a long polling request...")
 	err := requests.GetBreakpoints(test.GetContext().Store["agentId"].(string), &StatusHandler{&HandlingContext{}})
 	if err != nil {
 		test.PrintSoftFailure(fmt.Sprintf("Request failed with error: %v", err))

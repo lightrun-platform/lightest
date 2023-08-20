@@ -22,8 +22,8 @@ func (logger *TestLogger) PrintSoftFailure(message string) {
 	logger.printMessage(Orange, "STEP FAILED", message)
 }
 
-func (logger *TestLogger) PrintStatus(message string) {
-	logger.printMessage(Reset, "STATUS", message)
+func (logger *TestLogger) PrintInfo(message string) {
+	logger.printMessage(Reset, "INFO", message)
 }
 
 func (logger *TestLogger) PrintTestPassed() {

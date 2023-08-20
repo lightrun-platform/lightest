@@ -9,52 +9,63 @@ import (
 )
 
 const (
-	pingInterval      = time.Second * 10
-	writeWait         = time.Second * 5
-	pongWait          = time.Second * 15
-	maxMonitoringTime = time.Second * 60
+	pingIntervalSeconds  = 10
+	pingIntervalDuration = time.Second * pingIntervalSeconds
+
+	readWriteWaitSeconds  = 5
+	readWriteWaitDuration = time.Second * readWriteWaitSeconds
+
+	pongWaitSeconds  = 15
+	pongWaitDuration = time.Second * pongWaitSeconds
+
+	maxMonitoringSeconds  = 30
+	maxMonitoringDuration = time.Second * maxMonitoringSeconds
 )
 
 type PingPongMonitor struct {
 	Connection *websocket.Conn
 	*TestLogger
 
-	errChan           chan error
-	isMonitoring      bool
-	isMonitoringMutex sync.Mutex
-	pingTicker        *time.Ticker
-	monitoringTimer   <-chan time.Time
-	pongTimer         *time.Timer
-	pongTimerChan     chan bool
+	isMonitoring             bool
+	monitoringMutex          sync.Mutex
+	stopPingingTimer         <-chan time.Time
+	stopWaitingForPongsTimer <-chan time.Time
+	errChan                  chan error
+	pingTicker               *time.Ticker
+	pongTicker               *time.Ticker
+	unansweredPings          int
 }
 
 func (monitor *PingPongMonitor) Monitor(conn *websocket.Conn) bool {
 	monitor.Connection = conn
+
+	// Setting up the error channel used for signaling the event handler that an error in another goroutine occurred.
 	monitor.errChan = make(chan error)
 	defer close(monitor.errChan)
+
+	// Setting up the isMonitoring flag that is used to signal other goroutine they should stop. Must be synchronized.
 	monitor.isMonitoring = true
 	defer func() {
-		monitor.isMonitoringMutex.Lock()
+		monitor.monitoringMutex.Lock()
 		monitor.isMonitoring = false
-		monitor.isMonitoringMutex.Unlock()
+		monitor.monitoringMutex.Unlock()
 	}()
 
-	monitor.PrintStatus(
-		fmt.Sprintf(
-			"Starting ping ticker. Will send a ping every %d seconds for %d seconds",
-			int(pingInterval.Seconds()), maxMonitoringTime,
-		),
-	)
+	// A counter used to track the amount of pings that weren't yet answered with pongs. In a healthy scenario, should
+	// be either 0 or 1.
+	monitor.unansweredPings = 0
 
-	// Setting timers
-	monitor.setPongHandler()
-	monitor.pingTicker = time.NewTicker(pingInterval)
+	// Reads messages from the websocket connection in a loop as long as the monitor is active.
+	go monitor.readMessages()
+
+	monitor.initialiseTimedEvents()
 	defer monitor.pingTicker.Stop()
-	monitor.monitoringTimer = time.After(maxMonitoringTime)
+	defer monitor.pongTicker.Stop()
 
-	go monitor.sendPing()
-	monitor.pongTimer = time.AfterFunc(pongWait, func() { monitor.pongTimerChan <- true })
+	// Sending the first ping. Next one will be sent when the ping-ticker will tick.
+	go monitor.sendSinglePing()
 
+	// Handling ticker, timer, and channel-based events in a loop.
 	return monitor.handleEvents()
 }
 
@@ -62,32 +73,84 @@ func (monitor *PingPongMonitor) handleEvents() bool {
 	for {
 		select {
 		case <-monitor.pingTicker.C:
-			go monitor.sendPing()
-		case <-monitor.monitoringTimer:
+			go monitor.sendSinglePing()
+		case <-monitor.pongTicker.C:
 			{
-				monitor.PrintStepSuccess(
-					fmt.Sprintf(
-						"Monitored the websocket connection for %d seconds. No disconnections occurred.",
-						maxMonitoringTime.Seconds(),
-					),
+				monitor.PrintTestFailed(
+					"Did not receive a pong response in too long. Websocket stability in question.",
 				)
-				return true
-			}
-		case <-monitor.pongTimerChan:
-			{
-				monitor.PrintTestFailed("Did not receive a pong response. Websocket stability in question.")
 				return false
 			}
+		case <-monitor.stopPingingTimer:
+			{
+				if monitor.handlePingingStopEvent() {
+					return true
+				}
+			}
+		case <-monitor.stopWaitingForPongsTimer:
+			return monitor.handlePongWaitingStopEvent()
 		case <-monitor.errChan:
-			return false
+			return false // Error should have been printed already by method reporting the error.
 		}
 	}
+}
+
+func (monitor *PingPongMonitor) initialiseTimedEvents() {
+	monitor.setPongHandler()
+
+	monitor.PrintInfo(
+		fmt.Sprintf(
+			"Starting ping ticker. Will send a ping every %d seconds for %d seconds",
+			pingIntervalSeconds, maxMonitoringSeconds,
+		),
+	)
+	monitor.pingTicker = time.NewTicker(pingIntervalDuration)
+
+	monitor.PrintInfo(
+		fmt.Sprintf(
+			"Starting pong ticker. Will expect a pong every %d seconds for %d seconds",
+			pongWaitSeconds, maxMonitoringSeconds+pongWaitSeconds,
+		),
+	)
+	monitor.pongTicker = time.NewTicker(pongWaitDuration)
+
+	monitor.stopPingingTimer = time.After(maxMonitoringDuration)
+	monitor.stopWaitingForPongsTimer = time.After(maxMonitoringDuration + pongWaitDuration)
+}
+
+func (monitor *PingPongMonitor) handlePingingStopEvent() bool {
+	monitor.PrintInfo("Stopping the pinging loop.")
+	monitor.pingTicker.Stop()
+	if monitor.unansweredPings == 0 {
+		monitor.printTestSuccess(int(maxMonitoringDuration.Seconds()))
+		return true
+	}
+	return false
+}
+
+func (monitor *PingPongMonitor) handlePongWaitingStopEvent() bool {
+	monitor.PrintInfo("Stopping waiting for pongs.")
+	if monitor.unansweredPings == 0 {
+		monitor.printTestSuccess(int(maxMonitoringDuration.Seconds()) + int(pongWaitDuration.Seconds()))
+		return true
+	}
+	return false
+}
+
+func (monitor *PingPongMonitor) printTestSuccess(monitoringTime int) {
+	monitor.PrintStepSuccess(
+		fmt.Sprintf(
+			"Monitored the websocket connection for %d seconds. All pongs recieved. No disconnections occurred.",
+			monitoringTime,
+		),
+	)
 }
 
 func (monitor *PingPongMonitor) setPongHandler() {
 	monitor.Connection.SetPongHandler(
 		func(string) error {
-			err := monitor.Connection.SetReadDeadline(time.Now().Add(pongWait))
+			monitor.monitoringMutex.Lock()
+			err := monitor.Connection.SetReadDeadline(time.Now().Add(pongWaitDuration))
 			if err != nil {
 				monitor.PrintTestFailed(
 					fmt.Sprintf(
@@ -95,24 +158,37 @@ func (monitor *PingPongMonitor) setPongHandler() {
 					),
 				)
 				monitor.errChan <- err
+				monitor.monitoringMutex.Unlock()
 				return err
 			}
 			monitor.PrintStepSuccess("Pong was received.")
-			if !monitor.pongTimer.Stop() {
-				<-monitor.pongTimer.C
-			}
+			monitor.unansweredPings--
+			monitor.pongTicker.Reset(pongWaitDuration)
+			monitor.monitoringMutex.Unlock()
 			return nil
 		},
 	)
 }
 
-func (monitor *PingPongMonitor) sendPing() {
+func (monitor *PingPongMonitor) readMessages() {
+	for monitor.isMonitoring {
+		_ = monitor.Connection.SetReadDeadline(time.Now().Add(readWriteWaitDuration))
+		messageType, message, _ := monitor.Connection.ReadMessage()
+		if messageType == websocket.TextMessage {
+			monitor.PrintInfo(fmt.Sprintf("Got websocket message from server: %v", string(message)))
+		}
+	}
+}
+
+func (monitor *PingPongMonitor) sendSinglePing() {
+	monitor.monitoringMutex.Lock()
 	if !monitor.isMonitoring {
+		monitor.monitoringMutex.Unlock()
 		return
 	}
-	monitor.PrintStatus("Sending ping...")
+	monitor.PrintInfo("Sending ping...")
 	if err := monitor.Connection.WriteControl(
-		websocket.PingMessage, []byte{}, time.Now().Add(writeWait),
+		websocket.PingMessage, []byte{}, time.Now().Add(readWriteWaitDuration),
 	); err != nil {
 		monitor.PrintTestFailed(
 			fmt.Sprintf(
@@ -120,14 +196,14 @@ func (monitor *PingPongMonitor) sendPing() {
 			),
 		)
 		if monitor.isMonitoring {
-			monitor.isMonitoringMutex.Lock()
 			monitor.errChan <- err
-			monitor.isMonitoringMutex.Unlock()
 		}
+		monitor.monitoringMutex.Unlock()
 		return
 	}
 	monitor.PrintStepSuccess("Sent ping successfully.")
-	monitor.pongTimer.Reset(pongWait)
+	monitor.unansweredPings++
+	monitor.monitoringMutex.Unlock()
 }
 
 func (monitor *PingPongMonitor) SetLogger(logger *TestLogger) {

@@ -24,7 +24,7 @@ func (test *WebsocketTest) Test() bool {
 
 	websocketConnector := secured_connection.WebsocketConnector{TlsConfigProducer: test.TlsConfigProducer}
 
-	test.PrintStatus("Creating websocket connection...")
+	test.PrintInfo("Creating websocket connection...")
 	websocketConnection, err := websocketConnector.CreateWebsocketConnection(
 		test.GetContext().Store["accessToken"].(string),
 	)
@@ -43,7 +43,7 @@ func (test *WebsocketTest) Test() bool {
 }
 
 func (test *WebsocketTest) authenticate() bool {
-	test.PrintStatus("Authenticating with the Lightrun server...")
+	test.PrintInfo("Authenticating with the Lightrun server...")
 	accessToken := new(string) // Will be populated by the registration handler.
 	err := requests.Authenticate(
 		config.GetConfig().UserEmail, config.GetConfig().UserPassword,

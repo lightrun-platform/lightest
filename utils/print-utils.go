@@ -1,6 +1,9 @@
 package utils
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 const (
 	Red         = "\033[31m"
@@ -15,5 +18,5 @@ const (
 )
 
 func PrintMessage(color string, name string, status string, message string) {
-	fmt.Println(color + fmt.Sprintf("[%v] [%v] %v", name, status, message))
+	fmt.Println(color + fmt.Sprintf("[%v] [%s] [%v] %v", name, time.Now().Format("15:04:05"), status, message))
 }
