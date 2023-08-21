@@ -5,12 +5,13 @@ import (
 	"prerequisites-tester/communication/requests"
 	. "prerequisites-tester/communication/response-handling"
 	"prerequisites-tester/config"
+	"sync"
 	"time"
 )
 
 const (
 	pollingIntervalSeconds int = 10
-	pollingDurationSeconds int = 30
+	pollingDurationSeconds int = 20
 	minimumSuccessfulPolls int = 2
 	maximumFailedPolls     int = 1
 )
@@ -18,9 +19,10 @@ const (
 type PollingTest struct {
 	TestBase
 
+	mutex           sync.Mutex
+	shouldStop      bool
 	successfulPolls int
 	totalPolls      int
-	pollingTicker   *time.Ticker
 	pollingTimer    *time.Timer
 }
 
@@ -41,41 +43,44 @@ func (test *PollingTest) performPollingSegment() bool {
 		),
 	)
 
-	pollingTimer := time.After(time.Duration(pollingDurationSeconds) * time.Second)
-	pollingTicker := time.NewTicker(time.Duration(pollingIntervalSeconds) * time.Second)
-	defer pollingTicker.Stop()
+	test.shouldStop = false
+	endPollingTimer := time.After(time.Duration(pollingDurationSeconds) * time.Second)
 
-	test.handlePollingIteration() // Make one polling iteration before first tick.
-	for {
-		select {
-		case <-pollingTicker.C:
-			if !test.handlePollingIteration() {
-				return false
-			}
-		case <-pollingTimer:
-			return test.assessPollingStats()
-		}
-	}
+	go test.performPolling() // Make one polling iteration before first tick.
+	<-endPollingTimer
+	test.shouldStop = true
+	return test.assessPollingStats()
 }
 
-func (test *PollingTest) handlePollingIteration() bool {
-	test.successfulPolls += test.pollServer()
-	test.totalPolls++
-	if test.totalPolls-test.successfulPolls > maximumFailedPolls {
-		test.PrintTestFailed("Too many unsuccessful polling requests.")
-		return false
+func (test *PollingTest) performPolling() {
+	for {
+		test.mutex.Lock()
+		if test.shouldStop {
+			test.mutex.Unlock()
+			return
+		}
+		test.successfulPolls += test.pollServer()
+		test.totalPolls++
+		if test.totalPolls-test.successfulPolls > maximumFailedPolls {
+			test.PrintTestFailed("Too many unsuccessful polling requests.")
+			test.mutex.Unlock()
+			return
+		}
+		test.mutex.Unlock()
 	}
-	return true
 }
 
 func (test *PollingTest) assessPollingStats() bool {
+	test.mutex.Lock()
 	test.PrintInfo("Finished polling segment.")
 	if test.successfulPolls >= minimumSuccessfulPolls {
 		test.PrintStepSuccess("Long polling finished successfully")
 		test.PrintTestPassed()
+		test.mutex.Unlock()
 		return true
 	} else {
 		test.PrintTestFailed("Not enough successful long polling requests.")
+		test.mutex.Unlock()
 		return false
 	}
 }

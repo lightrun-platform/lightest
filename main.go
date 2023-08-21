@@ -18,7 +18,7 @@ func main() {
 
 	// Initializing a slice of Tester with several instantiations
 	testers := []tests.Tester{
-		//&tests.PollingTest{},
+		&tests.PollingTest{},
 		&tests.WebsocketTest{
 			TlsConfigProducer: &tls_configuration.PinnedCertConfigProducer{},
 			WebsocketMonitor:  &websocket_monitoring.PingPongMonitor{},
