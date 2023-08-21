@@ -8,8 +8,12 @@ Currently, the test application supports the following tests:
 ## Usage
 
 Since Go supports cross-compiling and comes with a built-in compiler support for multiple OSs and architectures, building a OS and architecture specific executables is simple.
-The Github release page should include the latest distributions for a combination of OSs and architectures we would like to support.
-Running the tester simply requires running the relevant distributed executable.
+The [Github release page](https://github.com/lightrun-platform/lightest/releases) should include the latest distributions for a combination of OSs and architectures we would like to support.
+Running the tester simply requires running the relevant distributed executable.  
+e.g., for running the linux, 32 bit executable, simply run:
+```
+./lightest-linux-x86
+```
 
 ### Configuration
 
