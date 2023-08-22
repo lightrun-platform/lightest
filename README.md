@@ -17,8 +17,12 @@ e.g., for running the linux, 32 bit executable, simply run:
 
 ### Configuration
 
-Before running the executable, the accompanied `config.json` file should be configured according to your needs.
-Configuring it is straightforward, as the necessary configuration file parameters written in the config should be relatively self-explanatory.
-
+Before running the executable, the accompanied `config.json` file should be configured according to your needs and reside in the same folder as the executable's.
+Configuring it is straightforward, as the necessary configuration file parameters written in the config should be relatively self-explanatory.  
+Nonetheless, note that the following fields must be filled:  
+* `agent.apiKey` - agent-polling test prerequisite.
+* `userEmail` - websocket-connection test prerequisite.
+* `userPassword` - websocket-connection test prerequisite
+* `companyId` - agent-polling and websocket-connection tests prerequisites.
 
 
