@@ -47,8 +47,12 @@ func main() {
 		Green, "Manager", "STATUS",
 		fmt.Sprintf("Tests passed successfully: %d", testsPassed),
 	)
+	failureColor := Green
+	if testsFailed != 0 {
+		failureColor = Red
+	}
 	PrintMessage(
-		Red, "Manager", "STATUS",
+		failureColor, "Manager", "STATUS",
 		fmt.Sprintf("Tests failures: %d", testsFailed),
 	)
 }
