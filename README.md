@@ -14,6 +14,10 @@ e.g., for running the linux, 32 bit executable, simply run:
 ```
 ./lightest-linux-x86
 ```
+You will most likely need to give the executable execution permissions:
+```
+chmod +x lightest-linux-x86
+```
 
 ### Configuration
 
