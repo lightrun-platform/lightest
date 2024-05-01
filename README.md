@@ -30,3 +30,22 @@ Nonetheless, note that the following fields must be filled:
 * `companyId` - agent-polling and websocket-connection tests prerequisites.
 
 
+## Build
+
+It should be quite easy building the Lightest executables on your own.  
+The following is a bash function that can be used to build Lightest for the currently supported set of platforms and architectures:
+
+```bash
+function crossBuildGo() {
+    GOOS=windows GOARCH=amd64 go build -o lightest-windows-amd64
+    GOOS=windows GOARCH=386 go build -o lightest-windows-x86
+    GOOS=linux GOARCH=arm64 go build -o lightest-linux-arm64
+    GOOS=linux GOARCH=386 go build -o lightest-linux-x86
+    GOOS=linux GOARCH=amd64 go build -o lightest-linux-amd64
+    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o lightest-alpine-arm64
+    GOOS=linux GOARCH=386 CGO_ENABLED=0 go build -o lightest-alpine-x86
+    GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o lightest-alpine-amd64
+    GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o lightest-darwin-amd64
+    GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o lightest-darwin-arm64
+}
+```
