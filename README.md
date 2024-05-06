@@ -49,3 +49,7 @@ function crossBuildGo() {
     GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o lightest-darwin-arm64
 }
 ```
+
+## Publish
+
+Publishing a new release is simple - simply go to the release page, click "Draft a new release", insert a release description and upload the release binaries.  
